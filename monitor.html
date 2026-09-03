@@ -2,20 +2,10 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Monitoramento - Rota Veicular</title>
+    <title>Painel de Monitoramento - Rota do Veículo</title>
     <style>
         html, body, #map { height: 100%; margin: 0; padding: 0; }
         #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
-        .numero-ponto {
-            background: white;
-            border: 1px solid #333;
-            border-radius: 50%;
-            text-align: center;
-            font-size: 10px;
-            font-weight: bold;
-            color: #000;
-            line-height: 16px;
-        }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -30,8 +20,8 @@
         let camadaPontos = L.layerGroup();
         let polylineRota;
         
-        // COLE AQUI O MESMO E EXATO LINK DO SEU GOOGLE APPS SCRIPT (/exec)
-        const urlAPI = "https://script.google.com/macros/s/AKfycbz3cpZLzklc6LvPmIre4ibC9VvYQuAZORXe8iGt-aeLXE8Zutojcu15VP79AiK8jmcgTQ/exec";
+        // COLE AQUI O SEU LINK ATUALIZADO DO GOOGLE APPS SCRIPT (/exec)
+        const urlAPI = "https://script.google.com/macros/s/AKfycbw39squwIZowxB8_e-wvkc09G_deBkpd6VhvO91s_pP0sFpLsZU9TyiDKCRECv_theyuQ/exec";
 
         function initMap() {
             map = L.map('map').setView([-12.9632, -38.4085], 15);
@@ -44,7 +34,15 @@
             camadaPontos.addTo(map);
             
             atualizarPainel();
-            setInterval(atualizarPainel, 15000);
+            setInterval(atualizarPainel, 15000); // Atualiza a cada 15 segundos
+        }
+
+        function formatarDataLocal(dataString) {
+            if (!dataString) return 'Agora';
+            if (dataString.includes('/')) return dataString;
+            const data = new Date(dataString);
+            return data.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
+                   ' (' + data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) + ')';
         }
 
         function atualizarPainel() {
@@ -52,7 +50,7 @@
                 .then(response => response.json())
                 .then(dados => {
                     if (Array.isArray(dados) && dados.length > 0) {
-                        camadaPontos.clearLayers();
+                        camadaPontos.clearLayers(); // Limpa os pontos antigos para redesenhar atualizados
 
                         const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
                         
@@ -63,30 +61,33 @@
                             polylineRota.setLatLngs(latLngs);
                         }
 
-                        // Adiciona os pontos numerados (0 verde na partida, 1, 2, 3... nos demais)
+                        // Adiciona os círculos pretos em cada coordenada registrada do histórico
                         latLngs.forEach((coord, index) => {
-                            let iconeNumero = L.divIcon({
-                                className: 'numero-ponto',
-                                html: index,
-                                iconSize: [18, 18],
-                                iconAnchor: [9, 9]
-                            });
-
-                            L.marker(coord, { icon: iconeNumero })
-                             .addTo(camadaPontos)
-                             .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${dados[index].timestamp}`);
+                            let corPonto = (index === 0) ? 'green' : 'black'; // O primeiro ponto fica verde (início) e os demais pretos
+                            let raioPonto = (index === 0) ? 8 : 4;
+                            
+                            L.circleMarker(coord, {
+                                radius: raioPonto,
+                                fillColor: corPonto,
+                                color: '#000',
+                                weight: 1,
+                                fillOpacity: 0.8
+                            }).addTo(camadaPontos).bindPopup(`Ponto ${index + 1} - ${dados[index].timestamp}`);
                         });
 
-                        // Posiciona o carrinho no último ponto atualizado
-                        const pontoAtualCarro = latLngs[latLngs.length - 1];
-                        const ultimoDado = dados[dados.length - 1];
+                        // Pega o último ponto (posição atual do carro)
+                        const ultimo = dados[dados.length - 1];
+                        const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
+                        const horaFormatada = formatarDataLocal(ultimo.timestamp);
 
+                        // Atualiza as caixas de texto informativas
                         document.getElementById("info").innerHTML = 
                             `<b>Status:</b> Em movimento 🚗<br>` +
-                            `<b>Última atualização:</b> ${ultimoDado.timestamp}<br>` +
-                            `<b>Total de pontos:</b> ${dados.length}<br>` +
-                            `<b>Lat/Lng:</b> ${pontoAtualCarro[0].toFixed(4)}, ${pontoAtualCarro[1].toFixed(4)}`;
+                            `<b>Última atualização:</b> ${horaFormatada}<br>` +
+                            `<b>Registros na rota:</b> ${dados.length}<br>` +
+                            `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
 
+                        // Ícone customizado de carrinho para a posição atual
                         const iconeCarro = L.divIcon({
                             html: '🚗',
                             className: 'custom-car-icon',
@@ -95,12 +96,13 @@
                         });
 
                         if (!markerCarro) {
-                            markerCarro = L.marker(pontoAtualCarro, { icon: iconeCarro }).addTo(map).bindPopup("Posição Atual do Veículo").openPopup();
+                            markerCarro = L.marker(posAtual, { icon: iconeCarro }).addTo(map).bindPopup("Posição Atual do Veículo").openPopup();
                         } else {
-                            markerCarro.setLatLng(pontoAtualCarro);
+                            markerCarro.setLatLng(posAtual);
                         }
 
-                        map.panTo(pontoAtualCarro);
+                        // Centraliza o mapa suavemente na posição atual do carro
+                        map.panTo(posAtual);
                     } else {
                         document.getElementById("info").innerHTML = `<b>Status:</b> Aguardando início da viagem (Aperte Iniciar no Celular)`;
                     }
