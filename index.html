@@ -2,91 +2,91 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Monitoramento com Histórico de Rota</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transmissor GPS Veicular</title>
     <style>
-        html, body, #map { height: 100%; margin: 0; padding: 0; }
-        #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
+        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; margin: 0; }
+        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        button { width: 100%; padding: 15px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        #btnIniciar { background-color: #28a745; }
+        #btnIniciar:active { background-color: #218838; }
+        #btnParar { background-color: #dc3545; display: none; }
+        #btnParar:active { background-color: #c82333; }
+        #status { font-size: 16px; color: #666; margin-top: 15px; font-weight: bold; }
+        #coords { font-size: 13px; color: #888; margin-top: 10px; }
     </style>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
-    <div id="info">Carregando rota do veículo...</div>
-    <div id="map"></div>
+
+    <div class="container">
+        <h2>Rastreador Veicular</h2>
+        <button id="btnIniciar" onclick="iniciarViagem()">🟢 Iniciar Viagem</button>
+        <button id="btnParar" onclick="pararViagem()">🔴 Parar Viagem</button>
+        <div id="status">Status: Aguardando início...</div>
+        <div id="coords">Lat/Lng: --</div>
+    </div>
 
     <script>
-        let map;
-        let marker;
-        let polyline;
-        let primeiraCarga = true;
-        // Cole aqui o seu link atualizado do Web App do Apps Script
-        const urlAPI = "https://script.google.com/macros/s/AKfycbyKXmBuEUt6LfriQl7fd-0r7Bi-Gji7_bDQkT21xPUf83FyPMfQKhTbH-w5ihYc5UzVfQ/exec";
+        // COLE AQUI O SEU LINK ATUALIZADO DO GOOGLE APPS SCRIPT (/exec)
+        const urlAPI = "https://script.google.com/macros/s/AKfycbx95bzRI0H_6IySv6oQikzIp0D17uCliG_mvLiIVkpeWscGDjBOIFRwKryWWaYZaDWC-w/exec";
+        
+        let intervaloID = null;
 
-        function initMap() {
-            map = L.map('map').setView([-12.9632, -38.4085], 15);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
+        function iniciarViagem() {
+            document.getElementById("status").innerText = "Iniciando e limpando planilha...";
             
-            atualizarRota();
-            setInterval(atualizarRota, 15000); // Atualiza a cada 15 segundos
+            // Avisa o servidor para limpar a planilha e começar do zero
+            fetch(urlAPI, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ acao: "iniciar" })
+            }).then(() => {
+                document.getElementById("btnIniciar").style.display = "none";
+                document.getElementById("btnParar").style.display = "block";
+                document.getElementById("status").innerText = "Status: Transmitindo (Gravando...)";
+                
+                // Envia imediatamente a primeira posição
+                capturarEEnviar();
+                
+                // Configura o envio a cada 15 segundos (15000 ms)
+                intervaloID = setInterval(capturarEEnviar, 15000);
+            }).catch(err => {
+                document.getElementById("status").innerText = "Erro ao iniciar!";
+                console.error(err);
+            });
         }
 
-        function formatarDataLocal(dataString) {
-            if (!dataString) return 'Agora';
-            if (dataString.includes('/')) return dataString;
-            const data = new Date(dataString);
-            if (isNaN(data.getTime())) return dataString; // Retorna string original caso não seja data válida
-            return data.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
-                   ' (' + data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) + ')';
+        function pararViagem() {
+            clearInterval(intervaloID);
+            document.getElementById("btnParar").style.display = "none";
+            document.getElementById("btnIniciar").style.display = "block";
+            document.getElementById("status").innerText = "Status: Viagem Encerrada.";
         }
 
-        function atualizarRota() {
-            fetch(urlAPI)
-                .then(response => response.json())
-                .then(dados => {
-                    if (Array.isArray(dados) && dados.length > 0) {
-                        // Constrói a lista de coordenadas [lat, lng] para a linha da rota
-                        const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
-                        
-                        // Pega o último registro (posição atual do veículo)
-                        const ultimo = dados[dados.length - 1];
-                        const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
-                        const horaFormatada = formatarDataLocal(ultimo.timestamp);
+        function capturarEEnviar() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    document.getElementById("coords").innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
 
-                        // Atualiza o texto informativo na tela
-                        document.getElementById("info").innerHTML = 
-                            `<b>Última atualização:</b> ${horaFormatada}<br>` +
-                            `<b>Total de pontos na rota:</b> ${dados.length}<br>` +
-                            `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
-
-                        // Desenha ou atualiza a linha da rota no mapa
-                        if (!polyline) {
-                            polyline = L.polyline(latLngs, { color: 'blue', weight: 4, opacity: 0.7 }).addTo(map);
-                        } else {
-                            polyline.setLatLngs(latLngs);
-                        }
-
-                        // Atualiza o marcador do veículo na posição mais recente
-                        if (!marker) {
-                            marker = L.marker(posAtual).addTo(map).bindPopup("Veículo").openPopup();
-                        } else {
-                            marker.setLatLng(posAtual);
-                        }
-
-                        // Centraliza no veículo na primeira carga bem-sucedida
-                        if (primeiraCarga) {
-                            map.setView(posAtual, 16);
-                            primeiraCarga = false;
-                        }
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar rota:", err));
+                    fetch(urlAPI, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lat: lat, lng: lng })
+                    }).catch(err => console.error("Erro no envio:", err));
+                    
+                }, error => {
+                    document.getElementById("status").innerText = "Erro no GPS: " + error.message;
+                }, { enableHighAccuracy: true });
+            } else {
+                alert("Geolocalização não suportada neste navegador.");
+            }
         }
-
-        window.onload = initMap;
     </script>
 </body>
 </html>
