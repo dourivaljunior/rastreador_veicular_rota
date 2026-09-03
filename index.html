@@ -3,89 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transmissor GPS Veicular</title>
+    <title>Rastreador Veicular</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; margin: 0; }
-        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { color: #333; margin-bottom: 20px; }
-        button { width: 100%; padding: 15px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        #btnIniciar { background-color: #28a745; }
-        #btnIniciar:active { background-color: #218838; }
-        #btnParar { background-color: #dc3545; display: none; }
-        #btnParar:active { background-color: #c82333; }
-        #status { font-size: 16px; color: #666; margin-top: 15px; font-weight: bold; }
-        #coords { font-size: 13px; color: #888; margin-top: 10px; }
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #111; color: #fff; }
+        .status { font-size: 20px; margin-top: 20px; color: #00ff00; }
+        .error { color: #ff4444; }
     </style>
 </head>
 <body>
-
-    <div class="container">
-        <h2>Rastreador Veicular</h2>
-        <button id="btnIniciar" onclick="iniciarViagem()">🟢 Iniciar Viagem</button>
-        <button id="btnParar" onclick="pararViagem()">🔴 Parar Viagem</button>
-        <div id="status">Status: Aguardando início...</div>
-        <div id="coords">Lat/Lng: --</div>
-    </div>
+    <h2>Sistema de Rastreamento</h2>
+    <p>Mantenha esta página aberta no celular do veículo.</p>
+    <div id="status" class="status">Iniciando GPS...</div>
 
     <script>
-        // COLE AQUI O SEU LINK ATUALIZADO DO GOOGLE APPS SCRIPT (/exec)
-        const urlAPI = "https://script.google.com/macros/s/AKfycbw39squwIZowxB8_e-wvkc09G_deBkpd6VhvO91s_pP0sFpLsZU9TyiDKCRECv_theyuQ/exec";
-        
-        let intervaloID = null;
+        const urlAPI = "https://script.google.com/macros/s/AKfycbyKXmBuEUt6LfriQl7fd-0r7Bi-Gji7_bDQkT21xPUf83FyPMfQKhTbH-w5ihYc5UzVfQ/exec";
+        const statusDiv = document.getElementById("status");
 
-        function iniciarViagem() {
-            document.getElementById("status").innerText = "Iniciando e limpando planilha...";
-            
-            // Avisa o servidor para limpar a planilha e começar do zero
+        function enviarPosicao(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
             fetch(urlAPI, {
                 method: "POST",
                 mode: "no-cors",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ acao: "iniciar" })
-            }).then(() => {
-                document.getElementById("btnIniciar").style.display = "none";
-                document.getElementById("btnParar").style.display = "block";
-                document.getElementById("status").innerText = "Status: Transmitindo (Gravando...)";
-                
-                // Envia imediatamente a primeira posição
-                capturarEEnviar();
-                
-                // Configura o envio a cada 15 segundos (15000 ms)
-                intervaloID = setInterval(capturarEEnviar, 15000);
-            }).catch(err => {
-                document.getElementById("status").innerText = "Erro ao iniciar!";
-                console.error(err);
+                body: JSON.stringify({ lat: lat, lng: lng })
+            })
+            .then(() => {
+                statusDiv.className = "status";
+                statusDiv.innerText = `Localização enviada!\nLat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+            })
+            .catch(err => {
+                statusDiv.className = "status error";
+                statusDiv.innerText = "Erro ao enviar dados.";
             });
         }
 
-        function pararViagem() {
-            clearInterval(intervaloID);
-            document.getElementById("btnParar").style.display = "none";
-            document.getElementById("btnIniciar").style.display = "block";
-            document.getElementById("status").innerText = "Status: Viagem Encerrada.";
+        function erroGPS(error) {
+            statusDiv.className = "status error";
+            statusDiv.innerText = "Erro no GPS: " + error.message;
         }
 
-        function capturarEEnviar() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(position => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    
-                    document.getElementById("coords").innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
-
-                    fetch(urlAPI, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ lat: lat, lng: lng })
-                    }).catch(err => console.error("Erro no envio:", err));
-                    
-                }, error => {
-                    document.getElementById("status").innerText = "Erro no GPS: " + error.message;
-                }, { enableHighAccuracy: true });
-            } else {
-                alert("Geolocalização não suportada neste navegador.");
-            }
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(enviarPosicao, erroGPS, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
+        } else {
+            statusDiv.innerText = "Geolocalização não suportada.";
         }
     </script>
 </body>
