@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador Veicular</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #111; color: #fff; }
+        .status { font-size: 20px; margin-top: 20px; color: #00ff00; }
+        .error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <h2>Sistema de Rastreamento</h2>
+    <p>Mantenha esta página aberta no celular do veículo.</p>
+    <div id="status" class="status">Iniciando GPS...</div>
+
+    <script>
+        const urlAPI = "https://script.google.com/macros/s/AKfycbxbLnCZNs568l9H7YYkjMsSqH_Xtr5SPLXg-IKoBIz9IN9ewOT1OE7FX8jG26duRq4h1A/exec";
+        const statusDiv = document.getElementById("status");
+
+        function enviarPosicao(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            fetch(urlAPI, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lat: lat, lng: lng })
+            })
+            .then(() => {
+                statusDiv.className = "status";
+                statusDiv.innerText = `Localização enviada!\nLat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+            })
+            .catch(err => {
+                statusDiv.className = "status error";
+                statusDiv.innerText = "Erro ao enviar dados.";
+            });
+        }
+
+        function erroGPS(error) {
+            statusDiv.className = "status error";
+            statusDiv.innerText = "Erro no GPS: " + error.message;
+        }
+
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(enviarPosicao, erroGPS, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
+        } else {
+            statusDiv.innerText = "Geolocalização não suportada.";
+        }
+    </script>
+</body>
+</html>
