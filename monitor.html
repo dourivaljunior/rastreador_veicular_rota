@@ -2,10 +2,21 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Monitoramento - Rota do Veículo</title>
+    <title>Painel de Monitoramento - Rota com Numeração</title>
     <style>
         html, body, #map { height: 100%; margin: 0; padding: 0; }
         #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
+        /* Estilo para os números exibidos ao lado dos pontos no mapa */
+        .numero-ponto {
+            background: white;
+            border: 1px solid #333;
+            border-radius: 50%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #000;
+            line-height: 16px;
+        }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +32,7 @@
         let polylineRota;
         
         // COLE AQUI O SEU LINK ATUALIZADO DO GOOGLE APPS SCRIPT (/exec)
-        const urlAPI = "https://script.google.com/macros/s/AKfycbxMTxF6RNeVxGHUc4z7KvkPwQU_0hKj_XoeH2l8GP3gE5LUroy66rVxJU3NhFFWibilrA/exec";
+        const urlAPI = "https://script.google.com/macros/s/AKfycbxYXoydlSBOM8j8pIZ36X4JJPY8F5fc4RZKY4TwlvXPu-6GF2IIVVSR-_OPpwek_Mlz6g/exec";
 
         function initMap() {
             map = L.map('map').setView([-12.9632, -38.4085], 15);
@@ -34,15 +45,7 @@
             camadaPontos.addTo(map);
             
             atualizarPainel();
-            setInterval(atualizarPainel, 15000); // Atualiza a cada 15 segundos
-        }
-
-        function formatarDataLocal(dataString) {
-            if (!dataString) return 'Agora';
-            if (dataString.includes('/')) return dataString;
-            const data = new Date(dataString);
-            return data.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
-                   ' (' + data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) + ')';
+            setInterval(atualizarPainel, 15000);
         }
 
         function atualizarPainel() {
@@ -50,7 +53,7 @@
                 .then(response => response.json())
                 .then(dados => {
                     if (Array.isArray(dados) && dados.length > 0) {
-                        camadaPontos.clearLayers(); // Limpa os pontos antigos para redesenhar atualizados
+                        camadaPontos.clearLayers();
 
                         const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
                         
@@ -61,30 +64,32 @@
                             polylineRota.setLatLngs(latLngs);
                         }
 
-                        // Adiciona os círculos pretos em cada coordenada registrada do histórico
+                        // Adiciona os pontos numerados no mapa (0 no início, 1, 2, 3... nos demais)
                         latLngs.forEach((coord, index) => {
-                            let corPonto = (index === 0) ? 'green' : 'black'; // O primeiro ponto fica verde (início) e os demais pretos
-                            let raioPonto = (index === 0) ? 8 : 4;
-                            
-                            L.circleMarker(coord, {
-                                radius: raioPonto,
-                                fillColor: corPonto,
-                                color: '#000',
-                                weight: 1,
-                                fillOpacity: 0.8
-                            }).addTo(camadaPontos).bindPopup(`Ponto ${index + 1} - ${dados[index].timestamp}`);
+                            let corPonto = (index === 0) ? '#28a745' : '#333'; // Verde para o 0 (partida), preto para os demais
+                            let textoLabel = index; // 0, 1, 2, 3...
+
+                            // Cria um ícone customizado com o número dentro
+                            let iconeNumero = L.divIcon({
+                                className: 'numero-ponto',
+                                html: textoLabel,
+                                iconSize: [18, 18],
+                                iconAnchor: [9, 9]
+                            });
+
+                            L.marker(coord, { icon: iconeNumero })
+                             .addTo(camadaPontos)
+                             .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${dados[index].timestamp}`);
                         });
 
                         // Pega o último ponto (posição atual do carro)
                         const ultimo = dados[dados.length - 1];
                         const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
-                        const horaFormatada = formatarDataLocal(ultimo.timestamp);
 
-                        // Atualiza as caixas de texto informativas
                         document.getElementById("info").innerHTML = 
                             `<b>Status:</b> Em movimento 🚗<br>` +
-                            `<b>Última atualização:</b> ${horaFormatada}<br>` +
-                            `<b>Registros na rota:</b> ${dados.length}<br>` +
+                            `<b>Última atualização:</b> ${ultimo.timestamp}<br>` +
+                            `<b>Total de pontos:</b> ${dados.length}<br>` +
                             `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
 
                         // Ícone customizado de carrinho para a posição atual
@@ -101,7 +106,6 @@
                             markerCarro.setLatLng(posAtual);
                         }
 
-                        // Centraliza o mapa suavemente na posição atual do carro
                         map.panTo(posAtual);
                     } else {
                         document.getElementById("info").innerHTML = `<b>Status:</b> Aguardando início da viagem (Aperte Iniciar no Celular)`;
