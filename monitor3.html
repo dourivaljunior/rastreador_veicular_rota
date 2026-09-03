@@ -2,86 +2,57 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Monitoramento com Histórico de Rota</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador Veicular</title>
     <style>
-        html, body, #map { height: 100%; margin: 0; padding: 0; }
-        #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #111; color: #fff; }
+        .status { font-size: 20px; margin-top: 20px; color: #00ff00; }
+        .error { color: #ff4444; }
     </style>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
-    <div id="info">Carregando rota do veículo...</div>
-    <div id="map"></div>
+    <h2>Sistema de Rastreamento</h2>
+    <p>Mantenha esta página aberta no celular do veículo.</p>
+    <div id="status" class="status">Iniciando GPS...</div>
 
     <script>
-        let map;
-        let marker;
-        let polyline;
-        // Cole aqui o seu link atualizado do Web App do Apps Script
         const urlAPI = "https://script.google.com/macros/s/AKfycbyKXmBuEUt6LfriQl7fd-0r7Bi-Gji7_bDQkT21xPUf83FyPMfQKhTbH-w5ihYc5UzVfQ/exec";
+        const statusDiv = document.getElementById("status");
 
-        function initMap() {
-            map = L.map('map').setView([-12.9632, -38.4085], 15);
+        function enviarPosicao(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
-            
-            atualizarRota();
-            setInterval(atualizarRota, 15000); // Atualiza a cada 15 segundos
+            fetch(urlAPI, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=utf-8" }, // Evita problemas de preflight CORS no Apps Script
+                body: JSON.stringify({ lat: lat, lng: lng })
+            })
+            .then(response => response.json())
+            .then(res => {
+                statusDiv.className = "status";
+                statusDiv.innerText = `Localização enviada!\nLat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+            })
+            .catch(err => {
+                statusDiv.className = "status error";
+                statusDiv.innerText = "Erro ao enviar dados para a API.";
+            });
         }
 
-        function formatarDataLocal(dataString) {
-            if (!dataString) return 'Agora';
-            if (dataString.includes('/')) return dataString;
-            const data = new Date(dataString);
-            return data.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
-                   ' (' + data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) + ')';
+        function erroGPS(error) {
+            statusDiv.className = "status error";
+            statusDiv.innerText = "Erro no GPS: " + error.message;
         }
 
-        function atualizarRota() {
-            fetch(urlAPI)
-                .then(response => response.json())
-                .then(dados => {
-                    if (Array.isArray(dados) && dados.length > 0) {
-                        // Constrói a lista de coordenadas [lat, lng] para a linha da rota
-                        const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
-                        
-                        // Pega o último registro (posição atual do veículo)
-                        const ultimo = dados[dados.length - 1];
-                        const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
-                        const horaFormatada = formatarDataLocal(ultimo.timestamp);
-
-                        // Atualiza o texto informativo na tela
-                        document.getElementById("info").innerHTML = 
-                            `<b>Última atualização:</b> ${horaFormatada}<br>` +
-                            `<b>Total de pontos na rota:</b> ${dados.length}<br>` +
-                            `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
-
-                        // Desenha ou atualiza a linha da rota no mapa
-                        if (!polyline) {
-                            polyline = L.polyline(latLngs, { color: 'blue', weight: 4, opacity: 0.7 }).addTo(map);
-                        } else {
-                            polyline.setLatLngs(latLngs);
-                        }
-
-                        // Atualiza o marcador do veículo na posição mais recente
-                        if (!marker) {
-                            marker = L.marker(posAtual).addTo(map).bindPopup("Veículo").openPopup();
-                        } else {
-                            marker.setLatLng(posAtual);
-                        }
-
-                        // Opcional: centraliza o mapa no carro apenas na primeira carga ou conforme preferir
-                        // map.setView(posAtual, map.getZoom());
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar rota:", err));
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(enviarPosicao, erroGPS, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
+        } else {
+            statusDiv.innerText = "Geolocalização não suportada.";
         }
-
-        window.onload = initMap;
     </script>
 </body>
 </html>
