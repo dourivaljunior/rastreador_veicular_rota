@@ -2,11 +2,10 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Monitoramento - Rota com Numeração</title>
+    <title>Painel de Monitoramento - Rota Veicular</title>
     <style>
         html, body, #map { height: 100%; margin: 0; padding: 0; }
         #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
-        /* Estilo para os números exibidos ao lado dos pontos no mapa */
         .numero-ponto {
             background: white;
             border: 1px solid #333;
@@ -48,6 +47,30 @@
             setInterval(atualizarPainel, 15000);
         }
 
+        // Função para corrigir e formatar a hora exata subtraindo o desvio de fuso se necessário
+        function corrigirHorario(dataString) {
+            if (!dataString) return 'Agora';
+            
+            // Se vier no formato ISO do navegador (ex: 2026-09-03T14:36:46.000Z)
+            if (dataString.includes('T')) {
+                let data = new Date(dataString);
+                // Subtrai 3 horas em milissegundos para ajustar para o horário de Brasília (-3h)
+                data.setTime(data.getTime() - (3 * 60 * 60 * 1000));
+                
+                let dia = String(data.getDate()).padStart(2, '0');
+                let mes = String(data.getMonth() + 1).padStart(2, '0');
+                let ano = data.getFullYear();
+                let hora = String(data.getHours()).padStart(2, '0');
+                let min = String(data.getMinutes()).padStart(2, '0');
+                let seg = String(data.getSeconds()).padStart(2, '0');
+                
+                return `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
+            }
+            
+            // Se já vier formatado bonitinho da planilha
+            return dataString;
+        }
+
         function atualizarPainel() {
             fetch(urlAPI)
                 .then(response => response.json())
@@ -64,12 +87,11 @@
                             polylineRota.setLatLngs(latLngs);
                         }
 
-                        // Adiciona os pontos numerados no mapa (0 no início, 1, 2, 3... nos demais)
+                        // Adiciona os pontos numerados no mapa (0 verde no início, 1, 2, 3... pretos nos demais)
                         latLngs.forEach((coord, index) => {
-                            let corPonto = (index === 0) ? '#28a745' : '#333'; // Verde para o 0 (partida), preto para os demais
-                            let textoLabel = index; // 0, 1, 2, 3...
+                            let textoLabel = index; 
+                            let horaFormatada = corrigirHorario(dados[index].timestamp);
 
-                            // Cria um ícone customizado com o número dentro
                             let iconeNumero = L.divIcon({
                                 className: 'numero-ponto',
                                 html: textoLabel,
@@ -77,22 +99,24 @@
                                 iconAnchor: [9, 9]
                             });
 
+                            let corBolinha = (index === 0) ? '#28a745' : '#333';
+
                             L.marker(coord, { icon: iconeNumero })
                              .addTo(camadaPontos)
-                             .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${dados[index].timestamp}`);
+                             .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${horaFormatada}`);
                         });
 
-                        // Pega o último ponto (posição atual do carro)
-                        const ultimo = dados[dados.length - 1];
-                        const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
+                        // O carrinho 🚗 começa exatamente no Ponto 0 (Início) e avança para o último ponto conforme atualiza
+                        const pontoAtualCarro = latLngs[latLngs.length - 1]; // Último ponto registrado
+                        const ultimoDado = dados[dados.length - 1];
+                        const horaUltimaFormatada = corrigirHorario(ultimoDado.timestamp);
 
                         document.getElementById("info").innerHTML = 
                             `<b>Status:</b> Em movimento 🚗<br>` +
-                            `<b>Última atualização:</b> ${ultimo.timestamp}<br>` +
+                            `<b>Última atualização:</b> ${horaUltimaFormatada}<br>` +
                             `<b>Total de pontos:</b> ${dados.length}<br>` +
-                            `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
+                            `<b>Lat/Lng:</b> ${pontoAtualCarro[0].toFixed(4)}, ${pontoAtualCarro[1].toFixed(4)}`;
 
-                        // Ícone customizado de carrinho para a posição atual
                         const iconeCarro = L.divIcon({
                             html: '🚗',
                             className: 'custom-car-icon',
@@ -101,12 +125,12 @@
                         });
 
                         if (!markerCarro) {
-                            markerCarro = L.marker(posAtual, { icon: iconeCarro }).addTo(map).bindPopup("Posição Atual do Veículo").openPopup();
+                            markerCarro = L.marker(pontoAtualCarro, { icon: iconeCarro }).addTo(map).bindPopup("Posição Atual do Veículo").openPopup();
                         } else {
-                            markerCarro.setLatLng(posAtual);
+                            markerCarro.setLatLng(pontoAtualCarro);
                         }
 
-                        map.panTo(posAtual);
+                        map.panTo(pontoAtualCarro);
                     } else {
                         document.getElementById("info").innerHTML = `<b>Status:</b> Aguardando início da viagem (Aperte Iniciar no Celular)`;
                     }
